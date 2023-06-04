@@ -102,6 +102,7 @@ nav:
       - writer/sqlserverwriter.md
       - writer/starrockswriter.md
       - writer/streamwriter.md
+      - writer/sybasewriter.md
       - writer/tdenginewriter.md
       - writer/txtfilewriter.md
   - debug.md
@@ -118,6 +119,13 @@ extra:
       link: https://twitter.com/mlsx
     - icon: fontawesome/brands/github
       link: https://github.com/wgzhao
+  alternate:
+    - name: English
+      link: /Addax/en/ 
+      lang: en
+    - name: 中文
+      link: /Addax/
+      lang: zh
 
 # Extensions
 markdown_extensions:
