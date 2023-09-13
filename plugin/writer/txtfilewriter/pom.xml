@@ -33,6 +33,18 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- integrate OpenDAL -->
+        <dependency>
+            <groupId>org.apache.opendal</groupId>
+            <artifactId>opendal-java</artifactId>
+            <version>${opendal.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.opendal</groupId>
+            <artifactId>opendal-java</artifactId>
+            <version>${opendal.version}</version>
+            <classifier>${os.detected.classifier}</classifier>
+        </dependency>
     </dependencies>
 
     <build>
@@ -55,6 +67,13 @@
                     </execution>
                 </executions>
             </plugin>
-        </plugins>
+        </plugins>        <extensions>
+        <extension>
+            <groupId>kr.motd.maven</groupId>
+            <artifactId>os-maven-plugin</artifactId>
+            <version>1.7.0</version>
+        </extension>
+    </extensions>
     </build>
+
 </project>
