@@ -20,6 +20,7 @@
 package com.wgzhao.addax.plugin.writer.txtfilewriter;
 
 import com.wgzhao.addax.common.base.Key;
+import com.wgzhao.addax.common.element.Record;
 import com.wgzhao.addax.common.exception.AddaxException;
 import com.wgzhao.addax.common.plugin.RecordReceiver;
 import com.wgzhao.addax.common.spi.Writer;
@@ -30,6 +31,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.filefilter.PrefixFileFilter;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.opendal.BlockingOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,15 +40,20 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.wgzhao.addax.common.base.Constant.DEFAULT_FIELD_DELIMITER;
 import static com.wgzhao.addax.common.base.Key.COMPRESS;
 import static com.wgzhao.addax.common.base.Key.DATE_FORMAT;
+import static com.wgzhao.addax.common.base.Key.FIELD_DELIMITER;
 import static com.wgzhao.addax.common.base.Key.FILE_FORMAT;
 import static com.wgzhao.addax.common.base.Key.FILE_NAME;
 import static com.wgzhao.addax.common.base.Key.FORMAT;
@@ -247,33 +254,58 @@ public class TxtFileWriter
         @Override
         public void startWrite(RecordReceiver lineReceiver)
         {
-            LOG.info("begin do write...");
-            String fileFullPath = StorageWriterUtil.buildFilePath(this.path, this.fileName, this.suffix);
-            LOG.info("write to file : [{}]", fileFullPath);
+            if (writerSliceConfig.getMap("opendal") != null) {
+                opendalWrite(lineReceiver);
+            }
+            else {
+                LOG.info("begin do write...");
+                String fileFullPath = StorageWriterUtil.buildFilePath(this.path, this.fileName, this.suffix);
+                LOG.info("write to file : [{}]", fileFullPath);
 
-            OutputStream outputStream = null;
+                OutputStream outputStream = null;
 
-            try {
-                File newFile = new File(fileFullPath);
-                assert newFile.createNewFile();
-                outputStream = new FileOutputStream(newFile);
-                StorageWriterUtil.writeToStream(lineReceiver, outputStream, this.writerSliceConfig, this.fileName,
-                        this.getTaskPluginCollector());
+                try {
+                    File newFile = new File(fileFullPath);
+                    assert newFile.createNewFile();
+                    outputStream = new FileOutputStream(newFile);
+                    StorageWriterUtil.writeToStream(lineReceiver, outputStream, this.writerSliceConfig, this.fileName,
+                            this.getTaskPluginCollector());
+                } catch (SecurityException se) {
+                    throw AddaxException.asAddaxException(TxtFileWriterErrorCode.SECURITY_NOT_ENOUGH,
+                            String.format("您没有权限创建文件  : [%s]", this.fileName));
+                } catch (IOException ioe) {
+                    throw AddaxException.asAddaxException(TxtFileWriterErrorCode.WRITE_FILE_IO_ERROR,
+                            String.format("无法创建待写文件 : [%s]", this.fileName), ioe);
+                } finally {
+                    IOUtils.closeQuietly(outputStream, null);
+                }
+                LOG.info("end do write");
             }
-            catch (SecurityException se) {
-                throw AddaxException.asAddaxException(TxtFileWriterErrorCode.SECURITY_NOT_ENOUGH,
-                        String.format("您没有权限创建文件  : [%s]", this.fileName));
-            }
-            catch (IOException ioe) {
-                throw AddaxException.asAddaxException(TxtFileWriterErrorCode.WRITE_FILE_IO_ERROR,
-                        String.format("无法创建待写文件 : [%s]", this.fileName), ioe);
-            }
-            finally {
-                IOUtils.closeQuietly(outputStream, null);
-            }
-            LOG.info("end do write");
         }
 
+        private void opendalWrite(RecordReceiver lineReceiver) {
+            LOG.info("Begin to write file with opendal....");
+            Map<String, String> params = writerSliceConfig.get("opendal", Map.class);
+            // fill path param
+            params.put("root", path);
+            String storageType = params.get("type");
+            String fieldDelimiter = writerSliceConfig.getChar(FIELD_DELIMITER, DEFAULT_FIELD_DELIMITER) + "";
+            String nullFormat = writerSliceConfig.getString(Key.NULL_FORMAT);
+            // 兼容format & dataFormat
+            String dateFormat = writerSliceConfig.getString(Key.DATE_FORMAT);
+            DateFormat dateParse = null; // warn: 可能不兼容
+            if (StringUtils.isNotBlank(dateFormat)) {
+                dateParse = new SimpleDateFormat(dateFormat);
+            }
+
+            try(BlockingOperator operator = new BlockingOperator(storageType, params) ) {
+                Record record;
+                while ((record = lineReceiver.getFromReader()) != null) {
+                    List<String> result = StorageWriterUtil.recordToList(record, nullFormat, dateParse, this.getTaskPluginCollector() );
+                    operator.write(this.fileName + this.suffix, StringUtils.joinWith(fieldDelimiter, result));
+                }
+            }
+        }
         @Override
         public void post()
         {

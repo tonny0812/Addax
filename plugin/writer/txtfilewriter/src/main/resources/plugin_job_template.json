@@ -4,6 +4,14 @@
     "path": "/tmp/result",
     "fileName": "test",
     "writeMode": "truncate",
-    "dateFormat": "yyyy-MM-dd"
+    "dateFormat": "yyyy-MM-dd",
+    "opendal": {
+      "type": "s3",
+      "endpoint": "http://127.0.0.1:9001",
+      "access_key_id":"",
+      "secret_access_key":"",
+      "region":"us-east-1",
+      "bucket":"test"
+    }
   }
 }
